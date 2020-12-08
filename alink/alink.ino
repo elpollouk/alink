@@ -1,8 +1,9 @@
 #include <LiquidCrystal.h>
+#include "errors.h"
 
 #define VERSION "1.07"
 #define VERSION_HEX 0x6B
-#define MESSAGE_BUFFER_SIZE 16
+#define DISPLAY_LINE_LENGTH 16
 #define DATA_BUFFER_SIZE 16
 #define PORT_SPEED 115200
 
@@ -13,8 +14,8 @@ typedef void (*pfnMode)(void);
 LiquidCrystal lcd(7, 8, 9, 10, 11, 12);
 
 // Output buffer for line one of the display
-char g_messageBuffer1[MESSAGE_BUFFER_SIZE + 1];
-char g_messageBuffer2[MESSAGE_BUFFER_SIZE + 1];
+char g_messageBuffer1[DISPLAY_LINE_LENGTH + 1];
+char g_messageBuffer2[DISPLAY_LINE_LENGTH + 1];
 // Data ring buffer
 uint8_t g_dataBuffer[DATA_BUFFER_SIZE];
 uint8_t g_dataIndex = 0;
@@ -31,12 +32,12 @@ void halt(const char* message) {
     lcd.setCursor(0, 1);
 
     uint8_t i;
-    for (i = 0; i < 16; i++) {
+    for (i = 0; i < DISPLAY_LINE_LENGTH; i++) {
         if (message[i] == 0) break;
         lcd.print(message[i]);
     }
 
-    for(; i < 16; i++) {
+    for(; i < DISPLAY_LINE_LENGTH; i++) {
         lcd.print(' ');
     }
 
@@ -89,7 +90,8 @@ uint8_t readByteFromBuffer(Handle& index) {
     return g_dataBuffer[index++ % DATA_BUFFER_SIZE];
 }
 
-uint8_t write(uint8_t byte, uint8_t checkSum) {
+uint8_t write(uint8_t byte, uint8_t checkSum = 0) {
+    // Update a rolling checksum as we send bytes
     Serial.write(byte);
     return checkSum ^ byte;
 }
@@ -105,33 +107,33 @@ bool isValidMessage(Handle h, uint8_t size) {
 void commandMode() {
     uint8_t checksum;
     Handle h = readIntoBuffer(3);
-    if (!isValidMessage(h, 3)) halt("Checksum error");
-    if (readByteFromBuffer(h) != 0x21) halt("Unxpected msg");
+    if (!isValidMessage(h, 3)) halt(ERROR_INVALID_CHECKSUM);
+    if (readByteFromBuffer(h) != 0x21) halt(ERROR_UNEXPECTED_MESSAGE);
     switch (readByteFromBuffer(h))
     {
         case 0x24: // Ping
-            checksum = write(0x62, 0);
+            checksum = write(0x62);
             checksum = write(0x22, checksum);
             checksum = write(0x40, checksum);
-            checksum = write(checksum, 0);
+            checksum = write(checksum);
             break;
 
         case 0x21: // Version info request
-            checksum = write(0x63, 0);
+            checksum = write(0x63);
             checksum = write(0x21, checksum);
             checksum = write(VERSION_HEX, checksum);
             checksum = write(0x01, checksum);
-            checksum = write(checksum, 0);
+            checksum = write(checksum);
             break;
 
         default:
-            halt("Unexpected req");
+            halt(ERROR_UNEXPECTED_REQUEST);
     }
 }
 
 void setup() {
-    memset(g_messageBuffer1, 0, MESSAGE_BUFFER_SIZE + 1);
-    memset(g_messageBuffer2, 0, MESSAGE_BUFFER_SIZE + 1);
+    memset(g_messageBuffer1, 0, DISPLAY_LINE_LENGTH + 1);
+    memset(g_messageBuffer2, 0, DISPLAY_LINE_LENGTH + 1);
     memset(g_dataBuffer, 0, DATA_BUFFER_SIZE);
     g_currentMode = commandMode;
 

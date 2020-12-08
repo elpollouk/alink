@@ -1,0 +1,5 @@
+#pragma once
+
+#define ERROR_INVALID_CHECKSUM    "M01"
+#define ERROR_UNEXPECTED_MESSAGE  "M02"
+#define ERROR_UNEXPECTED_REQUEST  "M03"
