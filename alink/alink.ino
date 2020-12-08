@@ -1,12 +1,13 @@
 #include <LiquidCrystal.h>
 
-#define VERSION "0.1"
+#define VERSION "1.07"
+#define VERSION_HEX 0x6B
 #define MESSAGE_BUFFER_SIZE 16
 #define DATA_BUFFER_SIZE 16
 #define PORT_SPEED 115200
 
 typedef uint8_t Handle;
-typedef void (pfnMode)(void);
+typedef void (*pfnMode)(void);
 
 // initialize the library with the numbers of the interface pins
 LiquidCrystal lcd(7, 8, 9, 10, 11, 12);
@@ -88,14 +89,52 @@ uint8_t readByteFromBuffer(Handle& index) {
     return g_dataBuffer[index++ % DATA_BUFFER_SIZE];
 }
 
-void heartbeatMode() {
-    readIntoBuffer(3);
+uint8_t write(uint8_t byte, uint8_t checkSum) {
+    Serial.write(byte);
+    return checkSum ^ byte;
+}
+
+bool isValidMessage(Handle h, uint8_t size) {
+    uint8_t v = 0;
+    while (size--)
+        v ^= readByteFromBuffer(h);
+    
+    return v == 0;
+}
+
+void commandMode() {
+    uint8_t checksum;
+    Handle h = readIntoBuffer(3);
+    if (!isValidMessage(h, 3)) halt("Checksum error");
+    if (readByteFromBuffer(h) != 0x21) halt("Unxpected msg");
+    switch (readByteFromBuffer(h))
+    {
+        case 0x24: // Ping
+            checksum = write(0x62, 0);
+            checksum = write(0x22, checksum);
+            checksum = write(0x40, checksum);
+            checksum = write(checksum, 0);
+            break;
+
+        case 0x21: // Version info request
+            checksum = write(0x63, 0);
+            checksum = write(0x21, checksum);
+            checksum = write(VERSION_HEX, checksum);
+            checksum = write(0x01, checksum);
+            checksum = write(checksum, 0);
+            break;
+
+        default:
+            halt("Unexpected req");
+    }
 }
 
 void setup() {
     memset(g_messageBuffer1, 0, MESSAGE_BUFFER_SIZE + 1);
     memset(g_messageBuffer2, 0, MESSAGE_BUFFER_SIZE + 1);
     memset(g_dataBuffer, 0, DATA_BUFFER_SIZE);
+    g_currentMode = commandMode;
+
     lcd.begin(16, 2);
     display(0, "aLink " VERSION);
     display(1, "Waiting...");
@@ -104,8 +143,5 @@ void setup() {
 }
 
 void loop() {
-    readIntoBuffer(3);
-    readIntoBuffer(3);
-    readIntoBuffer(3);
-    halt("done");
+    g_currentMode();
 }
