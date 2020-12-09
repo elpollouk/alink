@@ -28,6 +28,7 @@ pfnMode g_currentMode;
 DEF_MODE(command);
 DEF_MODE(status);
 DEF_MODE(locoSpeed);
+DEF_MODE(mystery);
 
 MODE(command) {
     debugMessage("Idle");
@@ -42,6 +43,10 @@ MODE(command) {
 
         case 0xE4: // Set loco speed
             setMode(locoSpeed);
+            break;
+
+        case 0x52: // Mystery message
+            setMode(mystery);
             break;
 
         default:
@@ -83,6 +88,15 @@ MODE(status) {
 MODE(locoSpeed) {
     debugMessage("Speed");
     g_messageBuffer.readFromPort(5);
+    g_messageBuffer.ensureValidMessage();
+
+    debugDelay();
+    setMode(command);
+}
+
+MODE(mystery) {
+    debugMessage("Mystery?");
+    g_messageBuffer.readFromPort(3);
     g_messageBuffer.ensureValidMessage();
 
     debugDelay();
