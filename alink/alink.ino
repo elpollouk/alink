@@ -32,7 +32,7 @@ MODE(commandMode);
 MODE(statusMode);
 
 void commandMode() {
-    display(1, "Idle");
+    debugMessage("Idle");
 
     g_messageBuffer.reset();
     g_messageBuffer.readFromPort(1);
@@ -48,6 +48,8 @@ void commandMode() {
 }
 
 void statusMode() {
+    debugMessage("Status?");
+
     uint8_t checksum;
     g_messageBuffer.readFromPort(2);
     g_messageBuffer.ensureValidMessage();
@@ -72,6 +74,7 @@ void statusMode() {
             halt(ERROR_UNEXPECTED_REQUEST, g_messageBuffer.get(1));
     }
 
+    debugDelay();
     setMode(commandMode);
 }
 
