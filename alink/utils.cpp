@@ -14,7 +14,7 @@ char nibbleToHex(uint8_t nibble) {
     return 'A' + (nibble - 10);
 }
 
-uint8_t writePacket(uint8_t byte, uint8_t checkSum) {
+uint8_t writeMessage(uint8_t byte, uint8_t checkSum) {
     // Update a rolling checksum as we send bytes
     Serial.write(byte);
     return checkSum ^ byte;

@@ -29,3 +29,8 @@ void MessageBuffer::ensureValidMessage() const  {
     
     if (v != 0) halt(ERROR_INVALID_CHECKSUM, v);
 }
+
+void MessageBuffer::recvMessage(uint8_t messageSize) {
+    readFromPort(messageSize - m_writeIndex);
+    ensureValidMessage();
+}

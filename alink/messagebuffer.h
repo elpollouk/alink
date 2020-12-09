@@ -21,12 +21,13 @@ public:
     void reset();
     void readFromPort(uint8_t numBytes);
     void ensureValidMessage() const;
+    void recvMessage(uint8_t messageSize);
 
     const uint8_t& bytesAvailable() const {
         return m_writeIndex;
     }
 
-    const uint8_t& get(uint8_t index) const {
+    const uint8_t& operator[](uint8_t index) const {
         ASSERT(index < m_writeIndex, ERROR_BUFFER_READ_OOB, index);
         return m_buffer[index];
     }
