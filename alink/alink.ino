@@ -1,14 +1,10 @@
-#include <LiquidCrystal.h>
-#include "errors.h"
+#include "globals.h"
+#include "messagebuffer.h"
 
-#define VERSION "1.07"
-#define VERSION_HEX 0x6B
-#define DISPLAY_LINE_LENGTH 16
-#define DATA_BUFFER_SIZE 16
-#define PORT_SPEED 115200
 
-typedef uint8_t Handle;
-typedef void (*pfnMode)(void);
+//-----------------------------------------------------------------------------------------------//
+// Globals section
+//-----------------------------------------------------------------------------------------------//
 
 // initialize the library with the numbers of the interface pins
 LiquidCrystal lcd(7, 8, 9, 10, 11, 12);
@@ -16,120 +12,73 @@ LiquidCrystal lcd(7, 8, 9, 10, 11, 12);
 // Output buffer for line one of the display
 char g_messageBuffer1[DISPLAY_LINE_LENGTH + 1];
 char g_messageBuffer2[DISPLAY_LINE_LENGTH + 1];
+
 // Data ring buffer
 uint8_t g_dataBuffer[DATA_BUFFER_SIZE];
-uint8_t g_dataIndex = 0;
+MessageBuffer g_messageBuffer(g_dataBuffer, DATA_BUFFER_SIZE);
+
 // Mode state
 pfnMode g_currentMode;
 
-void display(uint8_t line, const char* message) {
-    lcd.setCursor(0, line);
-    lcd.print(message);
-}
 
-void halt(const char* message) {
-    display(0, "ERROR           ");
-    lcd.setCursor(0, 1);
+//-----------------------------------------------------------------------------------------------//
+// Modes
+//-----------------------------------------------------------------------------------------------//
 
-    uint8_t i;
-    for (i = 0; i < DISPLAY_LINE_LENGTH; i++) {
-        if (message[i] == 0) break;
-        lcd.print(message[i]);
-    }
+#define MODE(m) void m();
+#define setMode(m) g_currentMode = m;
 
-    for(; i < DISPLAY_LINE_LENGTH; i++) {
-        lcd.print(' ');
-    }
-
-    while (true) {};
-}
-
-char nibbleToHex(uint8_t nibble) {
-    if (nibble < 10) {
-        return '0' + nibble;
-    }
-    return 'A' + (nibble - 10);
-}
-
-void render(char * target, uint8_t fromIndex) {
-    // Render a single line of bytes (8 bytes -> 16 hex chars)
-    for (uint8_t i = 0; i < DATA_BUFFER_SIZE / 2; i++) {
-        uint8_t byte = g_dataBuffer[(g_dataIndex + fromIndex + i) % DATA_BUFFER_SIZE];
-        target[i * 2] = nibbleToHex(byte >> 4);
-        target[(i * 2) + 1] = nibbleToHex(byte & 0xF);
-    }
-}
-
-void appendDataBuffer(uint8_t data) {
-    // Update the ring buffer
-    g_dataBuffer[g_dataIndex++ % DATA_BUFFER_SIZE] = data;
-
-    // Render the message to text lines
-    render(g_messageBuffer1, 0);
-    render(g_messageBuffer2, DATA_BUFFER_SIZE / 2);
-
-    // Display message
-    display(0, g_messageBuffer1);
-    display(1, g_messageBuffer2);
-}
-
-Handle readIntoBuffer(uint8_t count) {
-    Handle startIndex = g_dataIndex;
-    while (count != 0) {
-        // Receive data into buffer
-        if (Serial.available()) {
-            uint8_t inChar = (uint8_t)Serial.read();
-            appendDataBuffer(inChar);
-            count--;
-        }
-    }
-    return startIndex;
-}
-
-uint8_t readByteFromBuffer(Handle& index) {
-    return g_dataBuffer[index++ % DATA_BUFFER_SIZE];
-}
-
-uint8_t write(uint8_t byte, uint8_t checkSum = 0) {
-    // Update a rolling checksum as we send bytes
-    Serial.write(byte);
-    return checkSum ^ byte;
-}
-
-bool isValidMessage(Handle h, uint8_t size) {
-    uint8_t v = 0;
-    while (size--)
-        v ^= readByteFromBuffer(h);
-    
-    return v == 0;
-}
+MODE(commandMode);
+MODE(statusMode);
 
 void commandMode() {
-    uint8_t checksum;
-    Handle h = readIntoBuffer(3);
-    if (!isValidMessage(h, 3)) halt(ERROR_INVALID_CHECKSUM);
-    if (readByteFromBuffer(h) != 0x21) halt(ERROR_UNEXPECTED_MESSAGE);
-    switch (readByteFromBuffer(h))
-    {
-        case 0x24: // Ping
-            checksum = write(0x62);
-            checksum = write(0x22, checksum);
-            checksum = write(0x40, checksum);
-            checksum = write(checksum);
-            break;
+    display(1, "Idle");
 
-        case 0x21: // Version info request
-            checksum = write(0x63);
-            checksum = write(0x21, checksum);
-            checksum = write(VERSION_HEX, checksum);
-            checksum = write(0x01, checksum);
-            checksum = write(checksum);
+    g_messageBuffer.reset();
+    g_messageBuffer.readFromPort(1);
+    switch (g_messageBuffer.get(0))
+    {
+        case 0x21: // Status message
+            setMode(statusMode);
             break;
 
         default:
-            halt(ERROR_UNEXPECTED_REQUEST);
+            halt(ERROR_UNEXPECTED_MESSAGE, g_messageBuffer.get(0));
     }
 }
+
+void statusMode() {
+    uint8_t checksum;
+    g_messageBuffer.readFromPort(2);
+    g_messageBuffer.ensureValidMessage();
+    switch (g_messageBuffer.get(1))
+    {
+        case 0x24: // Ping
+            checksum = writePacket(0x62);
+            checksum = writePacket(0x22, checksum);
+            checksum = writePacket(0x40, checksum);
+            checksum = writePacket(checksum);
+            break;
+
+        case 0x21: // Version info request
+            checksum = writePacket(0x63);
+            checksum = writePacket(0x21, checksum);
+            checksum = writePacket(VERSION_HEX, checksum);
+            checksum = writePacket(0x01, checksum);
+            checksum = writePacket(checksum);
+            break;
+
+        default:
+            halt(ERROR_UNEXPECTED_REQUEST, g_messageBuffer.get(1));
+    }
+
+    setMode(commandMode);
+}
+
+
+//-----------------------------------------------------------------------------------------------//
+// Setup and main loop
+//-----------------------------------------------------------------------------------------------//
 
 void setup() {
     memset(g_messageBuffer1, 0, DISPLAY_LINE_LENGTH + 1);
@@ -139,7 +88,6 @@ void setup() {
 
     lcd.begin(16, 2);
     display(0, "aLink " VERSION);
-    display(1, "Waiting...");
 
     Serial.begin(PORT_SPEED);
 }
