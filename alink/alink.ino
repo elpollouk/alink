@@ -9,13 +9,9 @@
 // initialize the library with the numbers of the interface pins
 LiquidCrystal lcd(7, 8, 9, 10, 11, 12);
 
-// Output buffer for line one of the display
-char g_messageBuffer1[DISPLAY_LINE_LENGTH + 1];
-char g_messageBuffer2[DISPLAY_LINE_LENGTH + 1];
-
 // Data ring buffer
 uint8_t g_dataBuffer[DATA_BUFFER_SIZE];
-MessageBuffer g_messageBuffer(g_dataBuffer, DATA_BUFFER_SIZE);
+MessageBuffer g_messageBuffer(g_dataBuffer, sizeof(g_dataBuffer));
 
 // Mode state
 pfnMode g_currentMode;
@@ -25,21 +21,27 @@ pfnMode g_currentMode;
 // Modes
 //-----------------------------------------------------------------------------------------------//
 
-#define MODE(m) void m();
-#define setMode(m) g_currentMode = m;
+#define DEF_MODE(m) void mode_ ## m();
+#define MODE(m) void mode_ ## m()
+#define setMode(m) g_currentMode = mode_ ## m;
 
-MODE(commandMode);
-MODE(statusMode);
+DEF_MODE(command);
+DEF_MODE(status);
+DEF_MODE(locoSpeed);
 
-void commandMode() {
+MODE(command) {
     debugMessage("Idle");
 
     g_messageBuffer.reset();
     g_messageBuffer.readFromPort(1);
     switch (g_messageBuffer.get(0))
     {
-        case 0x21: // Status message
-            setMode(statusMode);
+        case 0x21: // Status request
+            setMode(status);
+            break;
+
+        case 0xE4: // Set loco speed
+            setMode(locoSpeed);
             break;
 
         default:
@@ -47,7 +49,7 @@ void commandMode() {
     }
 }
 
-void statusMode() {
+MODE(status) {
     debugMessage("Status?");
 
     uint8_t checksum;
@@ -75,24 +77,29 @@ void statusMode() {
     }
 
     debugDelay();
-    setMode(commandMode);
+    setMode(command);
 }
 
+MODE(locoSpeed) {
+    debugMessage("Speed");
+    g_messageBuffer.readFromPort(5);
+    g_messageBuffer.ensureValidMessage();
+
+    debugDelay();
+    setMode(command);
+}
 
 //-----------------------------------------------------------------------------------------------//
 // Setup and main loop
 //-----------------------------------------------------------------------------------------------//
 
 void setup() {
-    memset(g_messageBuffer1, 0, DISPLAY_LINE_LENGTH + 1);
-    memset(g_messageBuffer2, 0, DISPLAY_LINE_LENGTH + 1);
-    memset(g_dataBuffer, 0, DATA_BUFFER_SIZE);
-    g_currentMode = commandMode;
-
     lcd.begin(16, 2);
     display(0, "aLink " VERSION);
 
     Serial.begin(PORT_SPEED);
+
+    setMode(command);
 }
 
 void loop() {
