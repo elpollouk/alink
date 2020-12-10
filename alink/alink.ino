@@ -47,8 +47,8 @@ MODE(command) {
             setMode(cvWrite);
             break;
 
-        case 0xE4: // Set loco speed
-            setMode(locoSpeed);
+        case 0xE4: // Loco control
+            setMode(locoControl);
             break;
 
         case 0x52: // Mystery message
@@ -98,8 +98,8 @@ MODE(status) {
     setMode(command);
 }
 
-MODE(locoSpeed) {
-    debugMessage("Speed");
+MODE(locoControl) {
+    debugMessage("Loco");
     g_messageBuffer.recvMessage(6);
 
     debugDelay();
