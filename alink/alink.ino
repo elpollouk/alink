@@ -43,6 +43,10 @@ MODE(command) {
             setMode(cvSelect);
             break;
 
+        case 0x23: // CV write
+            setMode(cvWrite);
+            break;
+
         case 0xE4: // Set loco speed
             setMode(locoSpeed);
             break;
@@ -102,12 +106,7 @@ MODE(locoSpeed) {
     setMode(command);
 }
 
-MODE(cvSelect) {
-    debugMessage("CV Select");
-    g_messageBuffer.recvMessage(4);
-
-    g_currentCv = g_messageBuffer[2];
-
+void sendCvResponse() {
     uint8_t checksum;
     for (auto i = 0; i < 3; i++) {
         checksum = writeMessage(0x61);
@@ -119,7 +118,27 @@ MODE(cvSelect) {
         checksum = writeMessage(0x01, checksum);
         writeMessage(checksum);
     }
+}
 
+MODE(cvSelect) {
+    debugMessage("CV Select");
+    g_messageBuffer.recvMessage(4);
+
+    g_currentCv = g_messageBuffer[2];
+
+    sendCvResponse();
+    debugDelay();
+    setMode(command);
+}
+
+MODE(cvWrite) {
+    debugMessage("CV Write");
+    g_messageBuffer.recvMessage(5);
+
+    g_currentCv = g_messageBuffer[2];
+    g_cvs[g_currentCv] = g_messageBuffer[3];
+
+    sendCvResponse();
     debugDelay();
     setMode(command);
 }
