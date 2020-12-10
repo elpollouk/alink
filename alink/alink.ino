@@ -16,6 +16,10 @@ MessageBuffer g_messageBuffer(g_dataBuffer, sizeof(g_dataBuffer));
 // Mode state
 pfnMode g_currentMode;
 
+// CV Values
+uint8_t g_currentCv = 0;
+uint8_t g_cvs[256];
+
 
 //-----------------------------------------------------------------------------------------------//
 // Modes
@@ -33,6 +37,10 @@ MODE(command) {
     {
         case 0x21: // Status request
             setMode(status);
+            break;
+
+        case 0x22: // CV select
+            setMode(cvSelect);
             break;
 
         case 0xE4: // Set loco speed
@@ -55,11 +63,12 @@ MODE(status) {
     g_messageBuffer.recvMessage(3);
     switch (g_messageBuffer[1])
     {
-        case 0x24: // Ping
-            checksum = writeMessage(0x62);
-            checksum = writeMessage(0x22, checksum);
-            checksum = writeMessage(0x40, checksum);
-            checksum = writeMessage(checksum);
+        case 0x10: // CV read
+            checksum = writeMessage(0x63);
+            checksum = writeMessage(0x14, checksum);
+            checksum = writeMessage(g_currentCv, checksum);
+            checksum = writeMessage(g_cvs[g_currentCv], checksum);
+            writeMessage(checksum);
             break;
 
         case 0x21: // Version info request
@@ -67,7 +76,14 @@ MODE(status) {
             checksum = writeMessage(0x21, checksum);
             checksum = writeMessage(VERSION_HEX, checksum);
             checksum = writeMessage(0x01, checksum);
-            checksum = writeMessage(checksum);
+            writeMessage(checksum);
+            break;
+
+        case 0x24: // Ping
+            checksum = writeMessage(0x62);
+            checksum = writeMessage(0x22, checksum);
+            checksum = writeMessage(0x40, checksum);
+            writeMessage(checksum);
             break;
 
         default:
@@ -81,6 +97,28 @@ MODE(status) {
 MODE(locoSpeed) {
     debugMessage("Speed");
     g_messageBuffer.recvMessage(6);
+
+    debugDelay();
+    setMode(command);
+}
+
+MODE(cvSelect) {
+    debugMessage("CV Select");
+    g_messageBuffer.recvMessage(4);
+
+    g_currentCv = g_messageBuffer[2];
+
+    uint8_t checksum;
+    for (auto i = 0; i < 3; i++) {
+        checksum = writeMessage(0x61);
+        checksum = writeMessage(0x02, checksum);
+        writeMessage(checksum);
+    }
+    for (auto i = 0; i < 3; i++) {
+        checksum = writeMessage(0x61);
+        checksum = writeMessage(0x01, checksum);
+        writeMessage(checksum);
+    }
 
     debugDelay();
     setMode(command);
@@ -104,6 +142,15 @@ void setup() {
     display(0, "aLink " VERSION);
 
     Serial.begin(PORT_SPEED);
+
+    memset(g_cvs, 0, sizeof(g_cvs));
+    g_cvs[1] = 3;
+    g_cvs[3] = 5;
+    g_cvs[4] = 5;
+    g_cvs[7] = CV_VERSION;
+    g_cvs[8] = CV_MANUFACTURER;
+    g_cvs[10] = 127;
+    g_cvs[29] = 6;
 
     setMode(command);
 }

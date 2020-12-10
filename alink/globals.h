@@ -8,6 +8,8 @@
 #define DISPLAY_LINE_LENGTH 16
 #define DATA_BUFFER_SIZE 16
 #define PORT_SPEED 115200
+#define CV_MANUFACTURER 48
+#define CV_VERSION 133
 
 //-----------------------------------------------------------------------------------------------//
 // Common includes
