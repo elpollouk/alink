@@ -47,12 +47,23 @@ MODE(command) {
             setMode(cvWrite);
             break;
 
-        case 0xE4: // Loco control
-            setMode(locoControl);
+        case 0x3A: // Handshake part 1
+            setMode(handshake1);
+            break;
+
+        case 0x35: // Handshake part 2
+            setMode(handshake2);
             break;
 
         case 0x52: // Mystery message
             setMode(mystery);
+            break;
+
+        case 0xE4: // Loco control
+            setMode(locoControl);
+            break;
+
+        case 0xF0: // Ignore Arduino reset messages
             break;
 
         default:
@@ -93,6 +104,34 @@ MODE(status) {
         default:
             halt(ERROR_UNEXPECTED_REQUEST, g_messageBuffer[1]);
     }
+
+    debugDelay();
+    setMode(command);
+}
+
+MODE(handshake1) {
+    debugMessage("Handshake 1");
+    g_messageBuffer.recvMessage(12);
+
+    auto checksum = writeMessage(0x35);
+    checksum = writeMessage(0xA3, checksum);
+    checksum = writeMessage(0x49, checksum);
+    checksum = writeMessage(0xB3, checksum);
+    checksum = writeMessage(0xA6, checksum);
+    checksum = writeMessage(0xC1, checksum);
+    writeMessage(checksum);
+
+    debugDelay();
+    setMode(command);
+}
+
+MODE(handshake2) {
+    debugMessage("Handshake 2");
+    g_messageBuffer.recvMessage(7);
+
+    auto checksum = writeMessage(0x01);
+    checksum = writeMessage(0x04);
+    writeMessage(checksum);
 
     debugDelay();
     setMode(command);

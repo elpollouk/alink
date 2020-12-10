@@ -15,7 +15,7 @@ void MessageBuffer::readFromPort(uint8_t numBytes) {
     while (numBytes != 0) {
         // Receive data into buffer
         if (Serial.available()) {
-            uint8_t inChar = (uint8_t)Serial.read();
+            auto inChar = (uint8_t)Serial.read();
             append(inChar);
             numBytes--;
         }
@@ -24,10 +24,10 @@ void MessageBuffer::readFromPort(uint8_t numBytes) {
 
 void MessageBuffer::ensureValidMessage() const  {
     uint8_t v = 0;
-    for (uint8_t i = 0; i < m_writeIndex; i++)
+    for (auto i = 0; i < m_writeIndex; i++)
         v ^= m_buffer[i];
     
-    if (v != 0) halt(ERROR_INVALID_CHECKSUM, v);
+    if (v != 0) halt(ERROR_INVALID_CHECKSUM, m_buffer[m_writeIndex-1]);
 }
 
 void MessageBuffer::recvMessage(uint8_t messageSize) {
